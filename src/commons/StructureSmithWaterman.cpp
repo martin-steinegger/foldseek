@@ -62,6 +62,12 @@ StructureSmithWaterman::StructureSmithWaterman(size_t maxSequenceLength, int aaS
     profile->profile_3di_rev_byte = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
     profile->profile_3di_rev_word = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
     profile->profile_3di_rev_int  = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
+    profile->profile_12st_byte = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
+    profile->profile_12st_word = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
+    profile->profile_12st_int  = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
+    profile->profile_12st_rev_byte = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
+    profile->profile_12st_rev_word = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
+    profile->profile_12st_rev_int  = (simd_int*)mem_align(ALIGN_INT, aaSize * segSize * sizeof(simd_int));
     // gap penalties
 #ifdef GAP_POS_SCORING
     profile->profile_gDelOpen_byte = (simd_int*)mem_align(ALIGN_INT, segSize * sizeof(simd_int));
@@ -93,22 +99,32 @@ StructureSmithWaterman::StructureSmithWaterman(size_t maxSequenceLength, int aaS
     profile->query_aa_sequence     = new int8_t[maxSequenceLength];
     profile->query_3di_rev_sequence = new int8_t[maxSequenceLength];
     profile->query_3di_sequence     = new int8_t[maxSequenceLength];
+    profile->query_12st_rev_sequence = new int8_t[maxSequenceLength];
+    profile->query_12st_sequence     = new int8_t[maxSequenceLength];
     profile->composition_bias_aa   = new int8_t[maxSequenceLength];
     profile->composition_bias_ss   = new int8_t[maxSequenceLength];
     profile->composition_bias_aa_rev   = new int8_t[maxSequenceLength];
     profile->composition_bias_ss_rev   = new int8_t[maxSequenceLength];
+    profile->composition_bias_12st     = new int8_t[maxSequenceLength];
+    profile->composition_bias_12st_rev = new int8_t[maxSequenceLength];
     profile->profile_aa_word_linear = new short*[aaSize];
     profile_aa_word_linear_data = new short[aaSize*maxSequenceLength];
     profile->profile_3di_word_linear = new short*[aaSize];
     profile_3di_word_linear_data = new short[aaSize*maxSequenceLength];
+    profile->profile_12st_word_linear = new short*[aaSize];
+    profile_12st_word_linear_data = new short[aaSize*maxSequenceLength];
     profile->profile_aa_int_linear = new int32_t*[aaSize];
     profile_aa_int_linear_data = new int32_t[aaSize*maxSequenceLength];
     profile->profile_3di_int_linear = new int32_t*[aaSize];
     profile_3di_int_linear_data = new int32_t[aaSize*maxSequenceLength];
+    profile->profile_12st_int_linear = new int32_t*[aaSize];
+    profile_12st_int_linear_data = new int32_t[aaSize*maxSequenceLength];
     profile->mat_rev            = new int8_t[std::max(maxSequenceLength, (size_t)aaSize) * aaSize * 2];
     // this is the same alphabet size for both, please change this todo
     profile->mat_aa                = new int8_t[std::max(maxSequenceLength, (size_t)aaSize) * aaSize * 2];
     profile->mat_3di                = new int8_t[std::max(maxSequenceLength, (size_t)aaSize) * aaSize * 2];
+    profile->mat_12st               = new int8_t[std::max(maxSequenceLength, (size_t)aaSize) * aaSize * 2];
+    profile->has12St = false;
     profile->rev_alignment_aa_profile = new int8_t[maxSequenceLength * Sequence::PROFILE_AA_SIZE];
     profile->rev_alignment_3di_profile = new int8_t[maxSequenceLength * Sequence::PROFILE_AA_SIZE];
     profile->alignment_aa_profile = new int8_t[maxSequenceLength * Sequence::PROFILE_AA_SIZE];
@@ -121,11 +137,15 @@ StructureSmithWaterman::StructureSmithWaterman(size_t maxSequenceLength, int aaS
     memset(profile->query_aa_rev_sequence, 0, maxSequenceLength * sizeof(int8_t));
     memset(profile->query_3di_sequence, 0, maxSequenceLength * sizeof(int8_t));
     memset(profile->query_3di_rev_sequence, 0, maxSequenceLength * sizeof(int8_t));
+    memset(profile->query_12st_sequence, 0, maxSequenceLength * sizeof(int8_t));
+    memset(profile->query_12st_rev_sequence, 0, maxSequenceLength * sizeof(int8_t));
     memset(profile->mat_rev, 0, maxSequenceLength * aaSize);
     memset(profile->composition_bias_aa, 0, maxSequenceLength * sizeof(int8_t));
     memset(profile->composition_bias_ss, 0, maxSequenceLength * sizeof(int8_t));
     memset(profile->composition_bias_aa_rev, 0, maxSequenceLength * sizeof(int8_t));
     memset(profile->composition_bias_ss_rev, 0, maxSequenceLength * sizeof(int8_t));
+    memset(profile->composition_bias_12st, 0, maxSequenceLength * sizeof(int8_t));
+    memset(profile->composition_bias_12st_rev, 0, maxSequenceLength * sizeof(int8_t));
     block = block_new_aa_trace_xdrop(maxSequenceLength, maxSequenceLength, 4096);
 }
 
@@ -146,6 +166,12 @@ StructureSmithWaterman::~StructureSmithWaterman(){
     free(profile->profile_3di_rev_byte);
     free(profile->profile_3di_rev_word);
     free(profile->profile_3di_rev_int);
+    free(profile->profile_12st_byte);
+    free(profile->profile_12st_word);
+    free(profile->profile_12st_int);
+    free(profile->profile_12st_rev_byte);
+    free(profile->profile_12st_rev_word);
+    free(profile->profile_12st_rev_int);
 #ifdef GAP_POS_SCORING
     free(profile->profile_gDelOpen_byte);
     free(profile->profile_gDelOpen_word);
@@ -175,21 +201,30 @@ StructureSmithWaterman::~StructureSmithWaterman(){
     delete [] profile->query_aa_sequence;
     delete [] profile->query_3di_rev_sequence;
     delete [] profile->query_3di_sequence;
+    delete [] profile->query_12st_rev_sequence;
+    delete [] profile->query_12st_sequence;
     delete [] profile->composition_bias_aa;
     delete [] profile->composition_bias_ss;
     delete [] profile->composition_bias_aa_rev;
     delete [] profile->composition_bias_ss_rev;
+    delete [] profile->composition_bias_12st;
+    delete [] profile->composition_bias_12st_rev;
     delete [] profile->profile_aa_word_linear;
     delete [] profile_aa_word_linear_data;
     delete [] profile->profile_3di_word_linear;
     delete [] profile_3di_word_linear_data;
+    delete [] profile->profile_12st_word_linear;
+    delete [] profile_12st_word_linear_data;
     delete [] profile->profile_aa_int_linear;
     delete [] profile_aa_int_linear_data;
     delete [] profile->profile_3di_int_linear;
     delete [] profile_3di_int_linear_data;
+    delete [] profile->profile_12st_int_linear;
+    delete [] profile_12st_int_linear_data;
     delete [] profile->mat_rev;
     delete [] profile->mat_aa;
     delete [] profile->mat_3di;
+    delete [] profile->mat_12st;
     delete [] profile->rev_alignment_aa_profile;
     delete [] profile->rev_alignment_3di_profile;
     delete [] profile->alignment_aa_profile;
@@ -576,6 +611,10 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
                                                                             r.qEndPos1 + 1, profile->alphabetSize, profile->bias, queryOffset, 0);
             createQueryProfile<int8_t, VECSIZE_INT * 4, SUBSTITUTIONMATRIX>(profile->profile_3di_rev_byte, profile->query_3di_rev_sequence, profile->composition_bias_ss_rev, profile->mat_3di,
                                                                             r.qEndPos1 + 1, profile->alphabetSize, profile->bias, queryOffset, 0);
+            if (profile->has12St) {
+                createQueryProfile<int8_t, VECSIZE_INT * 4, SUBSTITUTIONMATRIX>(profile->profile_12st_rev_byte, profile->query_12st_rev_sequence, profile->composition_bias_12st_rev, profile->mat_12st,
+                                                                                r.qEndPos1 + 1, profile->alphabetSize, profile->bias, queryOffset, 0);
+            }
             bests_reverse = sw_sse2_byte<SUBSTITUTIONMATRIX>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
                                                              gap_open, gap_extend,
 #ifdef GAP_POS_SCORING
@@ -609,6 +648,10 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
                                                                              r.qEndPos1 + 1, profile->alphabetSize, 0, queryOffset, 0);
             createQueryProfile<int16_t, VECSIZE_INT * 2, SUBSTITUTIONMATRIX>(profile->profile_3di_rev_word, profile->query_3di_rev_sequence, profile->composition_bias_ss_rev, profile->mat_3di,
                                                                              r.qEndPos1 + 1, profile->alphabetSize, 0, queryOffset, 0);
+            if (profile->has12St) {
+                createQueryProfile<int16_t, VECSIZE_INT * 2, SUBSTITUTIONMATRIX>(profile->profile_12st_rev_word, profile->query_12st_rev_sequence, profile->composition_bias_12st_rev, profile->mat_12st,
+                                                                                 r.qEndPos1 + 1, profile->alphabetSize, 0, queryOffset, 0);
+            }
             bests_reverse = sw_sse2_word<SUBSTITUTIONMATRIX>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
                                                              gap_open, gap_extend,
 #ifdef GAP_POS_SCORING
@@ -654,6 +697,12 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
                 profile->profile_3di_rev_int, profile->query_3di_rev_sequence, profile->composition_bias_ss_rev, profile->mat_3di,
                 r.qEndPos1 + 1, profile->alphabetSize, 0, queryOffset, 0
             );
+            if (profile->has12St) {
+                createQueryProfile<int32_t, VECSIZE_INT * 1, SUBSTITUTIONMATRIX>(
+                    profile->profile_12st_rev_int, profile->query_12st_rev_sequence, profile->composition_bias_12st_rev, profile->mat_12st,
+                    r.qEndPos1 + 1, profile->alphabetSize, 0, queryOffset, 0
+                );
+            }
             bests_reverse = sw_sse2_int<SUBSTITUTIONMATRIX>(
                 db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
                 gap_open, gap_extend,
@@ -1557,7 +1606,9 @@ void StructureSmithWaterman::ssw_init(Sequence* q_aa,
                                       Sequence* q_3di,
                                       const int8_t* mat_aa,
                                       const int8_t* mat_3di,
-                                      const BaseMatrix *m){
+                                      const BaseMatrix *m,
+                                      Sequence* q_12st,
+                                      const int8_t* mat_12st){
     profile->bias = 0;
     const int32_t alphabetSize = m->alphabetSize;
     int32_t compositionBias = 0;
@@ -1577,11 +1628,17 @@ void StructureSmithWaterman::ssw_init(Sequence* q_aa,
         memset(profile->composition_bias_aa, 0, q_aa->L * sizeof(int8_t));
         memset(profile->composition_bias_ss, 0, q_aa->L * sizeof(int8_t));
     }
+    memset(profile->composition_bias_12st, 0, q_aa->L * sizeof(int8_t));
     // copy memory to local memory todo: maybe change later
     memcpy(profile->mat_aa, mat_aa, alphabetSize * alphabetSize * sizeof(int8_t));
     memcpy(profile->mat_3di, mat_3di, alphabetSize * alphabetSize * sizeof(int8_t));
     memcpy(profile->query_aa_sequence, q_aa->numSequence, q_aa->L);
     memcpy(profile->query_3di_sequence, q_3di->numSequence, q_3di->L);
+    profile->has12St = (q_12st != NULL && mat_12st != NULL);
+    if (profile->has12St) {
+        memcpy(profile->mat_12st, mat_12st, alphabetSize * alphabetSize * sizeof(int8_t));
+        memcpy(profile->query_12st_sequence, q_12st->numSequence, q_12st->L);
+    }
 
     bool isProfile = Parameters::isEqualDbtype(q_3di->getSequenceType(), Parameters::DBTYPE_HMM_PROFILE) &&
                      Parameters::isEqualDbtype(q_aa->getSequenceType(),  Parameters::DBTYPE_HMM_PROFILE);
@@ -1629,7 +1686,14 @@ void StructureSmithWaterman::ssw_init(Sequence* q_aa,
         for (int32_t i = 0; i < matAASize; i++){
             biasAA = std::min(biasAA, mat_aa[i]);
         }
-        bias = bias3Di + biasAA;
+        int8_t bias12St = 0;
+        if (profile->has12St) {
+            int32_t mat12StSize = q_12st->subMat->alphabetSize * q_12st->subMat->alphabetSize;
+            for (int32_t i = 0; i < mat12StSize; i++) {
+                bias12St = std::min(bias12St, mat_12st[i]);
+            }
+        }
+        bias = bias3Di + biasAA + bias12St;
     }
 
     bias = abs(bias) + abs(compositionBias);
@@ -1683,6 +1747,20 @@ void StructureSmithWaterman::ssw_init(Sequence* q_aa,
                                                                          profile->query_3di_sequence,
                                                                          profile->composition_bias_ss, profile->mat_3di,
                                                                          q_3di->L, alphabetSize, 0, 0, 0);
+        if (profile->has12St) {
+            createQueryProfile<int8_t, VECSIZE_INT * 4, SUBSTITUTIONMATRIX>(profile->profile_12st_byte,
+                                                                            profile->query_12st_sequence,
+                                                                            profile->composition_bias_12st, profile->mat_12st,
+                                                                            q_12st->L, alphabetSize, bias, 0, 0);
+            createQueryProfile<int16_t, VECSIZE_INT * 2, SUBSTITUTIONMATRIX>(profile->profile_12st_word,
+                                                                             profile->query_12st_sequence,
+                                                                             profile->composition_bias_12st, profile->mat_12st,
+                                                                             q_12st->L, alphabetSize, 0, 0, 0);
+            createQueryProfile<int32_t, VECSIZE_INT * 1, SUBSTITUTIONMATRIX>(profile->profile_12st_int,
+                                                                             profile->query_12st_sequence,
+                                                                             profile->composition_bias_12st, profile->mat_12st,
+                                                                             q_12st->L, alphabetSize, 0, 0, 0);
+        }
     }
     for(int32_t i = 0; i< alphabetSize; i++) {
         profile->profile_aa_word_linear[i] = &profile_aa_word_linear_data[i*q_aa->L];
@@ -1698,6 +1776,15 @@ void StructureSmithWaterman::ssw_init(Sequence* q_aa,
             profile->profile_aa_int_linear[i][j] = mat_aa[i * alphabetSize + q_aa->numSequence[j]] + profile->composition_bias_ss[j];
             profile->profile_3di_int_linear[i][j] = mat_3di[i * alphabetSize + q_3di->numSequence[j]];
         }
+
+        if (profile->has12St) {
+            profile->profile_12st_word_linear[i] = &profile_12st_word_linear_data[i*q_12st->L];
+            profile->profile_12st_int_linear[i] = &profile_12st_int_linear_data[i*q_12st->L];
+            for (int j = 0; j < q_12st->L; j++) {
+                profile->profile_12st_word_linear[i][j] = mat_12st[i * alphabetSize + q_12st->numSequence[j]];
+                profile->profile_12st_int_linear[i][j] = mat_12st[i * alphabetSize + q_12st->numSequence[j]];
+            }
+        }
     }
 
     // create reverse structures
@@ -1705,6 +1792,10 @@ void StructureSmithWaterman::ssw_init(Sequence* q_aa,
     std::reverse_copy(  profile->query_3di_sequence, profile->query_3di_sequence + q_3di->L, profile->query_3di_rev_sequence);
     std::reverse_copy(  profile->composition_bias_aa, profile->composition_bias_aa + q_aa->L, profile->composition_bias_aa_rev);
     std::reverse_copy(  profile->composition_bias_ss, profile->composition_bias_ss + q_3di->L, profile->composition_bias_ss_rev);
+    if (profile->has12St) {
+        std::reverse_copy(profile->query_12st_sequence, profile->query_12st_sequence + q_12st->L, profile->query_12st_rev_sequence);
+        std::reverse_copy(profile->composition_bias_12st, profile->composition_bias_12st + q_12st->L, profile->composition_bias_12st_rev);
+    }
 
     profile->query_length = q_aa->L;
     profile->alphabetSize = alphabetSize;

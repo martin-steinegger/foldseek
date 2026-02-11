@@ -14,10 +14,34 @@
 #include "TMaligner.h"
 #include "Coordinate16.h"
 #include "LDDT.h"
+#include "structureto12st.h"
 
 #ifdef OPENMP
 #include <omp.h>
 #endif
+#include <memory>
+
+namespace {
+inline void split3Di12St(const char *src, size_t len,
+                         std::vector<char> &seq3di,
+                         std::vector<char> &seq12st,
+                         const BaseMatrix &subMat3Di,
+                         const BaseMatrix &subMat12St) {
+    if (seq3di.size() < len) {
+        seq3di.resize(len);
+    }
+    if (seq12st.size() < len) {
+        seq12st.resize(len);
+    }
+    for (size_t i = 0; i < len; ++i) {
+        unsigned char val = static_cast<unsigned char>(src[i]);
+        unsigned char state3di = static_cast<unsigned char>(val / Alphabet12St::STATE_CNT);
+        unsigned char state12st = static_cast<unsigned char>(val % Alphabet12St::STATE_CNT);
+        seq3di[i] = subMat3Di.num2aa[state3di];
+        seq12st[i] = subMat12St.num2aa[state12st];
+    }
+}
+} // namespace
 
 
 template<typename T>
@@ -175,6 +199,9 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
         t3DiDbr = new IndexReader(StructureUtil::getIndexWithSuffix(par.db2, "_ss"), par.threads, IndexReader::SEQUENCES, touch ? IndexReader::PRELOAD_INDEX : 0);
     }
 
+    bool target3Di12St = StructureUtil::is3Di12StDb(t3DiDbr->sequenceReader->getDbtype());
+    bool query3Di12St  = StructureUtil::is3Di12StDb(qdbr3Di.sequenceReader->getDbtype());
+
     bool needTMaligner = (par.tmScoreThr > 0);
     bool needLDDT = (par.lddtThr > 0);
 
@@ -222,8 +249,30 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
             break;
         }
     }
+    std::string mat12st;
+    if (query3Di12St || target3Di12St) {
+        for (size_t i = 0; i < par.substitutionMatrices.size(); i++) {
+            if (par.substitutionMatrices[i].name == "12st.out") {
+                std::string matrixData((const char *)par.substitutionMatrices[i].subMatData,
+                                       par.substitutionMatrices[i].subMatDataLen);
+                std::string matrixName = par.substitutionMatrices[i].name;
+                char * serializedMatrix = BaseMatrix::serialize(matrixName, matrixData);
+                mat12st.assign(serializedMatrix);
+                free(serializedMatrix);
+                break;
+            }
+        }
+        if (mat12st.empty()) {
+            Debug(Debug::ERROR) << "Cannot find 12st substitution matrix\n";
+            EXIT(EXIT_FAILURE);
+        }
+    }
     float aaFactor = (par.alignmentType == LocalParameters::ALIGNMENT_TYPE_3DI_AA) ? 1.4 : 0.0;
     SubstitutionMatrix subMatAA(blosum.c_str(), aaFactor, par.scoreBias);
+    std::unique_ptr<SubstitutionMatrix> subMat12St;
+    if (query3Di12St || target3Di12St) {
+        subMat12St.reset(new SubstitutionMatrix(mat12st.c_str(), par.submat12stScale, par.scoreBias));
+    }
     //temporary output file
     Debug::Progress progress(resultReader.getSize());
 
@@ -239,6 +288,15 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
     for (int i = 0; i < subMatAA.alphabetSize; i++) {
         for (int j = 0; j < subMatAA.alphabetSize; j++) {
             tinySubMatAA[i * subMatAA.alphabetSize + j] = subMatAA.subMatrix[i][j];
+        }
+    }
+    int8_t * tinySubMat12St = NULL;
+    if (query3Di12St || target3Di12St) {
+        tinySubMat12St = (int8_t*) mem_align(ALIGN_INT, subMat12St->alphabetSize * 32);
+        for (int i = 0; i < subMat12St->alphabetSize; i++) {
+            for (int j = 0; j < subMat12St->alphabetSize; j++) {
+                tinySubMat12St[i * subMat12St->alphabetSize + j] = subMat12St->subMatrix[i][j];
+            }
         }
     }
 
@@ -259,6 +317,24 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
         Sequence qRevSeq3Di(par.maxSeqLen, qdbr3Di.getDbtype(), (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
         Sequence tSeqAA(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) &subMatAA, 0, false, par.compBiasCorrection);
         Sequence tSeq3Di(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
+        std::unique_ptr<Sequence> qSeq12St;
+        std::unique_ptr<Sequence> tSeq12St;
+        std::vector<char> qSeq3Di21Buf;
+        std::vector<char> qSeq12StBuf;
+        std::vector<char> tSeq3Di21Buf;
+        std::vector<char> tSeq12StBuf;
+        if (query3Di12St || target3Di12St) {
+            if (query3Di12St) {
+                qSeq12St.reset(new Sequence(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, subMat12St.get(), 0, false, par.compBiasCorrection));
+                qSeq3Di21Buf.reserve(par.maxSeqLen);
+                qSeq12StBuf.reserve(par.maxSeqLen);
+            }
+            if (target3Di12St) {
+                tSeq12St.reset(new Sequence(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, subMat12St.get(), 0, false, par.compBiasCorrection));
+                tSeq3Di21Buf.reserve(par.maxSeqLen);
+                tSeq12StBuf.reserve(par.maxSeqLen);
+            }
+        }
         TMaligner *tmaligner = NULL;
         if(needTMaligner) {
             tmaligner = new TMaligner(
@@ -290,7 +366,13 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
                 char *querySeq3Di = qdbr3Di.sequenceReader->getData(queryId, thread_idx);
 
                 unsigned int querySeqLen = qdbr3Di.sequenceReader->getSeqLen(queryId);
-                qSeq3Di.mapSequence(id, queryKey, querySeq3Di, querySeqLen);
+                const char *querySeq3Di21 = querySeq3Di;
+                if (query3Di12St) {
+                    split3Di12St(querySeq3Di, querySeqLen, qSeq3Di21Buf, qSeq12StBuf, subMat3Di, *subMat12St);
+                    querySeq3Di21 = qSeq3Di21Buf.data();
+                    qSeq12St->mapSequence(id, queryKey, qSeq12StBuf.data(), querySeqLen);
+                }
+                qSeq3Di.mapSequence(id, queryKey, querySeq3Di21, querySeqLen);
                 qSeqAA.mapSequence(id, queryKey, querySeqAA, querySeqLen);
                 if(needLDDT || needTMaligner){
                     size_t qId = qcadbr->sequenceReader->getId(queryKey);
@@ -304,13 +386,18 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
                         lddtcalculator->initQuery(qSeq3Di.L, queryCaData, &queryCaData[qSeq3Di.L], &queryCaData[qSeq3Di.L+qSeq3Di.L]);
                     }
                 }
-                qRevSeq3Di.mapSequence(id, queryKey, querySeq3Di, querySeqLen);
+                qRevSeq3Di.mapSequence(id, queryKey, querySeq3Di21, querySeqLen);
                 qRevSeqAA.mapSequence(id, queryKey, querySeqAA, querySeqLen);
                 std::pair<double, double> muLambda = evaluer.predictMuLambda(qSeq3Di.numSequence, qSeq3Di.L);
-                structureSmithWaterman.ssw_init(&qSeqAA, &qSeq3Di, tinySubMatAA, tinySubMat3Di, &subMatAA);
+                structureSmithWaterman.ssw_init(&qSeqAA, &qSeq3Di, tinySubMatAA, tinySubMat3Di, &subMatAA,
+                                               query3Di12St ? qSeq12St.get() : NULL, tinySubMat12St);
                 qRevSeq3Di.reverse();
                 qRevSeqAA.reverse();
-                reverseStructureSmithWaterman.ssw_init(&qSeqAA, &qSeq3Di, tinySubMatAA, tinySubMat3Di, &subMatAA);
+                if (query3Di12St) {
+                    qSeq12St->reverse();
+                }
+                reverseStructureSmithWaterman.ssw_init(&qSeqAA, &qSeq3Di, tinySubMatAA, tinySubMat3Di, &subMatAA,
+                                                       query3Di12St ? qSeq12St.get() : NULL, tinySubMat12St);
                 int passedNum = 0;
                 int rejected = 0;
                 while (*data != '\0' && passedNum < par.maxAccept && rejected < par.maxRejected) {
@@ -324,7 +411,13 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
                     char * targetSeqAA = tAADbr->sequenceReader->getData(targetId, thread_idx);
                     const int targetSeqLen = static_cast<int>(t3DiDbr->sequenceReader->getSeqLen(targetId));
 
-                    tSeq3Di.mapSequence(targetId, dbKey, targetSeq3Di, targetSeqLen);
+                    const char *targetSeq3Di21 = targetSeq3Di;
+                    if (target3Di12St) {
+                        split3Di12St(targetSeq3Di, targetSeqLen, tSeq3Di21Buf, tSeq12StBuf, subMat3Di, *subMat12St);
+                        targetSeq3Di21 = tSeq3Di21Buf.data();
+                        tSeq12St->mapSequence(targetId, dbKey, tSeq12StBuf.data(), targetSeqLen);
+                    }
+                    tSeq3Di.mapSequence(targetId, dbKey, targetSeq3Di21, targetSeqLen);
                     tSeqAA.mapSequence(targetId, dbKey, targetSeqAA, targetSeqLen);
                     if(Util::canBeCovered(par.covThr, par.covMode, qSeq3Di.L, targetSeqLen) == false){
                         rejected++;
@@ -395,6 +488,7 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
 
     free(tinySubMatAA);
     free(tinySubMat3Di);
+    free(tinySubMat12St);
 
     dbw.close();
     resultReader.close();

@@ -159,7 +159,8 @@ public:
      -2 -2 -2  2 //T
      mat is the pointer to the array {2, -2, -2, -2, -2, 2, -2, -2, -2, -2, 2, -2, -2, -2, -2, 2}
      */
-    void ssw_init(Sequence *q_aa, Sequence *q_3di, const int8_t *mat_aa, const int8_t *mat_3di, const BaseMatrix *m);
+    void ssw_init(Sequence *q_aa, Sequence *q_3di, const int8_t *mat_aa, const int8_t *mat_3di, const BaseMatrix *m,
+                  Sequence *q_12st = NULL, const int8_t *mat_12st = NULL);
 
 
     static char cigar_int_to_op (uint32_t cigar_int);
@@ -226,12 +227,24 @@ private:
         simd_int* profile_3di_rev_int;
         int8_t* query_3di_sequence;
         int8_t* query_3di_rev_sequence;
+        simd_int* profile_12st_byte;
+        simd_int* profile_12st_word;
+        simd_int* profile_12st_int;
+        simd_int* profile_12st_rev_byte;
+        simd_int* profile_12st_rev_word;
+        simd_int* profile_12st_rev_int;
+        int8_t* query_12st_sequence;
+        int8_t* query_12st_rev_sequence;
         int8_t* composition_bias_ss;
         int8_t* composition_bias_aa;
         int8_t* composition_bias_aa_rev;
         int8_t* composition_bias_ss_rev;
+        int8_t* composition_bias_12st;
+        int8_t* composition_bias_12st_rev;
         int8_t* mat_aa;
         int8_t* mat_3di;
+        int8_t* mat_12st;
+        bool has12St;
         int8_t* rev_alignment_aa_profile;
         int8_t* rev_alignment_3di_profile;
         int8_t* alignment_aa_profile;
@@ -257,6 +270,8 @@ private:
         int32_t ** profile_aa_int_linear;
         short ** profile_3di_word_linear;
         int32_t ** profile_3di_int_linear;
+        short ** profile_12st_word_linear;
+        int32_t ** profile_12st_int_linear;
     };
     simd_int* vHStore;
     simd_int* vHLoad;
@@ -386,6 +401,8 @@ private:
     int32_t * profile_aa_int_linear_data;
     short * profile_3di_word_linear_data;
     int32_t * profile_3di_int_linear_data;
+    short * profile_12st_word_linear_data;
+    int32_t * profile_12st_int_linear_data;
     bool aaBiasCorrection;
     float aaBiasCorrectionScale;
     SubstitutionMatrix * subMatAA;

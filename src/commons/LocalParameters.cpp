@@ -2,6 +2,7 @@
 #include "Command.h"
 #include "Debug.h"
 #include "mat3di.out.h"
+#include "mat12st.out.h"
 
 const int LocalParameters::DBTYPE_CA_ALPHA = 101;
 const int LocalParameters::DBTYPE_TMSCORE = 102;
@@ -88,6 +89,7 @@ LocalParameters::LocalParameters() :
     scoringMatrixFile = MultiParam<NuclAA<std::string>>(NuclAA<std::string>("3di.out", "3di.out"));
     seedScoringMatrixFile = MultiParam<NuclAA<std::string>>(NuclAA<std::string>("3di.out", "3di.out"));
     substitutionMatrices.emplace_back("3di.out", mat3di_out, mat3di_out_len);
+    substitutionMatrices.emplace_back("12st.out", mat12st_out, mat12st_out_len);
 
     // structurecreatedb
     structurecreatedb.push_back(&PARAM_GPU);
