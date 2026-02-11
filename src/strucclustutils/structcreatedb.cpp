@@ -973,7 +973,7 @@ int structcreatedb(int argc, const char **argv, const Command& command) {
     Debug(Debug::INFO) << "Output file: " << outputName << "\n";
     SORT_PARALLEL(par.filenames.begin(), par.filenames.end());
 
-    DBWriter torsiondbw((outputName+"_ss").c_str(), (outputName+"_ss.index").c_str(), static_cast<unsigned int>(par.threads), par.compressed, Parameters::DBTYPE_AMINO_ACIDS);
+    DBWriter torsiondbw((outputName+"_ss").c_str(), (outputName+"_ss.index").c_str(), static_cast<unsigned int>(par.threads), par.compressed, DBReader<unsigned int>::setExtendedDbtype(Parameters::DBTYPE_AMINO_ACIDS, LocalParameters::DBTYPE_EXTENDED_3DI_12ST));
     torsiondbw.open();
     DBWriter hdbw((outputName+"_h").c_str(), (outputName+"_h.index").c_str(), static_cast<unsigned int>(par.threads), par.compressed, Parameters::DBTYPE_GENERIC_DB);
     hdbw.open();
@@ -1426,7 +1426,7 @@ int structcreatedb(int argc, const char **argv, const Command& command) {
         DBReader<unsigned int> torsiondbr_reorder((outputName+"_ss").c_str(), (outputName+"_ss.index").c_str(), par.threads, DBReader<unsigned int>::USE_INDEX|DBReader<unsigned int>::USE_DATA);
         torsiondbr_reorder.open(DBReader<unsigned int>::NOSORT);
         torsiondbr_reorder.readMmapedDataInMemory();
-        DBWriter torsiondbw_reorder((outputName+"_ss").c_str(), (outputName+"_ss.index").c_str(), static_cast<unsigned int>(par.threads), par.compressed, Parameters::DBTYPE_AMINO_ACIDS);
+        DBWriter torsiondbw_reorder((outputName+"_ss").c_str(), (outputName+"_ss.index").c_str(), static_cast<unsigned int>(par.threads), par.compressed, DBReader<unsigned int>::setExtendedDbtype(Parameters::DBTYPE_AMINO_ACIDS, LocalParameters::DBTYPE_EXTENDED_3DI_12ST));
         torsiondbw_reorder.open();
         reorderDbByIdOrder(torsiondbw_reorder, torsiondbr_reorder, mappingOrder);
         torsiondbw_reorder.close(true);

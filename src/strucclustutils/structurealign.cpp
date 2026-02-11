@@ -174,6 +174,9 @@ int structurealign(int argc, const char **argv, const Command& command) {
         q3DiDbr = new IndexReader(StructureUtil::getIndexWithSuffix(par.db1, "_ss"), par.threads, IndexReader::SRC_SEQUENCES, (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
     }
 
+    bool target3Di12St = StructureUtil::is3Di12StDb(t3DiDbr.sequenceReader->getDbtype());
+    bool query3Di12St  = StructureUtil::is3Di12StDb(q3DiDbr->sequenceReader->getDbtype());
+
     bool db1CaExist = FileUtil::fileExists((par.db1 + "_ca.dbtype").c_str());
     bool db2CaExist = FileUtil::fileExists((par.db2 + "_ca.dbtype").c_str());
     if(Parameters::isEqualDbtype(tAADbr.getDbtype(), Parameters::DBTYPE_INDEX_DB)){
