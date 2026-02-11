@@ -408,7 +408,8 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBl
         const uint8_t gap_open,
         const uint8_t gap_extend,
         std::string & backtrace,
-        StructureSmithWaterman::s_align r) {
+        StructureSmithWaterman::s_align r,
+        const unsigned char *db_12st_sequence) {
 #define MAX_SIZE 4096 //TODO
     size_t query_len = profile->query_length;
     size_t target_len = db_length;
@@ -416,15 +417,24 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBl
     gaps.open   = -gap_open;
     gaps.extend = -gap_extend;
     int32_t target_score = r.score1;
+    bool use12St = profile->has12St && db_12st_sequence != NULL;
 
     // note: instead of query_len or target_len, it is possible to use query_aa really large length
     // and reuse data structures to avoid allocations
     PaddedBytes* query_aa = block_new_padded_aa(query_len, MAX_SIZE);
     PaddedBytes* query_3di = block_new_padded_aa(query_len, MAX_SIZE);
+    PaddedBytes* query_12st = NULL;
     PosBias* query_bias = block_new_pos_bias(query_len, MAX_SIZE);
     PaddedBytes* target_aa = block_new_padded_aa(target_len, MAX_SIZE);
     PaddedBytes* target_3di = block_new_padded_aa(target_len, MAX_SIZE);
+    PaddedBytes* target_12st = NULL;
     PosBias* target_bias = block_new_pos_bias(target_len, MAX_SIZE);
+    AAMatrix* matrix_12st = NULL;
+
+    if (use12St) {
+        query_12st = block_new_padded_aa(query_len, MAX_SIZE);
+        target_12st = block_new_padded_aa(target_len, MAX_SIZE);
+    }
 
     int32_t queryStartPos = query_len - (r.qEndPos1 + 1);
     int32_t queryAlnLen = r.qEndPos1 + 1;
@@ -437,11 +447,18 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBl
         query_3di_sequence_str.push_back(subMat3Di->num2aa[profile->query_3di_rev_sequence[queryStartPos + i]]);
         query_bias_arr[i] =  profile->composition_bias_aa_rev[queryStartPos + i] +
                              profile->composition_bias_ss_rev[queryStartPos + i];
+        if (use12St) {
+            query_bias_arr[i] += profile->composition_bias_12st_rev[queryStartPos + i];
+        }
     }
 
 
     block_set_bytes_padded_aa(query_aa,  (const uint8_t*) query_aa_sequence_str.data(), queryAlnLen, MAX_SIZE);
     block_set_bytes_padded_aa(query_3di, (const uint8_t*) query_3di_sequence_str.data(), queryAlnLen, MAX_SIZE);
+    if (use12St) {
+        block_set_bytes_padded_aa_numsequence(query_12st,
+            (const uint8_t*)(profile->query_12st_rev_sequence + queryStartPos), queryAlnLen, MAX_SIZE);
+    }
 
     block_set_pos_bias(query_bias, query_bias_arr, queryAlnLen);
 
@@ -449,12 +466,22 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBl
     std::string db_aa_sequence_str;
     std::string db_3di_sequence_str;
     // copy this db_aa_sequence,db_aa_sequence + r.dbEndPos1 + 1 in reverse order to db_aa_sequence_str and mappping to ascii using subMatAA->num2aa
+    uint8_t* db_12st_rev = NULL;
+    if (use12St) {
+        db_12st_rev = new uint8_t[targetAlnLen];
+    }
     for(int i = targetAlnLen - 1; i >= 0; i--){
         db_aa_sequence_str.push_back(subMatAA->num2aa[db_aa_sequence[i]]);
         db_3di_sequence_str.push_back(subMat3Di->num2aa[db_3di_sequence[i]]);
+        if (use12St) {
+            db_12st_rev[targetAlnLen - 1 - i] = db_12st_sequence[i];
+        }
     }
     block_set_bytes_padded_aa(target_aa, (const uint8_t*) db_aa_sequence_str.data(), targetAlnLen, MAX_SIZE);
     block_set_bytes_padded_aa(target_3di, (const uint8_t*)db_3di_sequence_str.data(), targetAlnLen, MAX_SIZE);
+    if (use12St) {
+        block_set_bytes_padded_aa_numsequence(target_12st, db_12st_rev, targetAlnLen, MAX_SIZE);
+    }
     int16_t * target_bias_arr = new int16_t[targetAlnLen];
     memset(target_bias_arr, 0, targetAlnLen * sizeof(int16_t));
     block_set_pos_bias(target_bias, target_bias_arr, targetAlnLen);
@@ -481,6 +508,16 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBl
 
     }
 
+    if (use12St) {
+        matrix_12st = block_new_simple_aamatrix(1, -1);
+        for (int i = 0; i < profile->alphabetSize; i++) {
+            for (int j = 0; j < profile->alphabetSize; j++) {
+                block_set_aamatrix_num(matrix_12st, i, j,
+                                       profile->mat_12st[i * profile->alphabetSize + j]);
+            }
+        }
+    }
+
     Cigar* cigar = block_new_cigar(queryAlnLen, targetAlnLen);
 
     AlignResult res;
@@ -497,8 +534,14 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBl
         range.max = MAX_SIZE;
         // estimated x-drop threshold
         int32_t x_drop = -(min_size * gaps.extend + gaps.open);
-        block_align_3di_aa_trace_xdrop(block, query_aa, query_3di, query_bias, target_aa, target_3di, target_bias,
-                                       matrix_aa, matrix_3di, gaps, range, x_drop);
+        if (use12St) {
+            block_align_3di_12st_aa_trace_xdrop(block, query_aa, query_3di, query_12st, query_bias,
+                                                target_aa, target_3di, target_12st, target_bias,
+                                                matrix_aa, matrix_3di, matrix_12st, gaps, range, x_drop);
+        } else {
+            block_align_3di_aa_trace_xdrop(block, query_aa, query_3di, query_bias, target_aa, target_3di, target_bias,
+                                           matrix_aa, matrix_3di, gaps, range, x_drop);
+        }
         res = block_res_aa_trace_xdrop(block);
         min_size *= 2;
     }
@@ -512,15 +555,6 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBl
     }
 
     block_cigar_aa_trace_xdrop(block, res.query_idx, res.reference_idx, cigar);
-//    printf("query_aa: %s\nquery_3di: %s\ntarget_aa: %s\ntarget_3di: %s\nscore: %d\nidx: (%lu, %lu)\n",
-//           profile->query_aa_rev_sequence,
-//           profile->query_3di_rev_sequence,
-//           db_aa_sequence,
-//           db_3di_sequence,
-//           res.score,
-//           res.query_idx,
-//           res.reference_idx);
-
 
     cigar_len = block_len_cigar(cigar);
     // Note: 'M' signals either query_aa match or mismatch
@@ -566,8 +600,12 @@ cleanup:
     block_free_pos_bias(target_bias);
     block_free_aamatrix(matrix_3di);
     block_free_aamatrix(matrix_aa);
+    if (query_12st) block_free_padded_aa(query_12st);
+    if (target_12st) block_free_padded_aa(target_12st);
+    if (matrix_12st) block_free_aamatrix(matrix_12st);
     delete [] query_bias_arr;
     delete [] target_bias_arr;
+    delete [] db_12st_rev;
     return r;
 }
 

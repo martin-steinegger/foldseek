@@ -269,9 +269,9 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
     }
     float aaFactor = (par.alignmentType == LocalParameters::ALIGNMENT_TYPE_3DI_AA) ? 1.4 : 0.0;
     SubstitutionMatrix subMatAA(blosum.c_str(), aaFactor, par.scoreBias);
-    std::unique_ptr<SubstitutionMatrix> subMat12St;
+    SubstitutionMatrix *subMat12St = NULL;
     if (query3Di12St || target3Di12St) {
-        subMat12St.reset(new SubstitutionMatrix(mat12st.c_str(), par.submat12stScale, par.scoreBias));
+        subMat12St = new SubstitutionMatrix(mat12st.c_str(), par.submat12stScale, par.scoreBias);
     }
     //temporary output file
     Debug::Progress progress(resultReader.getSize());
@@ -496,5 +496,6 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
         delete t3DiDbr;
         delete tAADbr;
     }
+    delete subMat12St;
     return EXIT_SUCCESS;
 }

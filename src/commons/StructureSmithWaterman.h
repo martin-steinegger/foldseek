@@ -138,7 +138,8 @@ public:
             const uint8_t gap_open,
             const uint8_t gap_extend,
             std::string & backtrace,
-            StructureSmithWaterman::s_align r);
+            StructureSmithWaterman::s_align r,
+            const unsigned char *db_12st_sequence = NULL);
 
 
     /*!	@function	Create the query profile using the query sequence.

@@ -61,6 +61,7 @@ static void structureAlignDefault(LocalParameters & par) {
 int alignStructure(StructureSmithWaterman & structureSmithWaterman,
                    StructureSmithWaterman & reverseStructureSmithWaterman,
                    Sequence & tSeqAA, Sequence & tSeq3Di,
+                   Sequence * tSeq12St,
                    unsigned int querySeqLen, unsigned int targetSeqLen,
                    EvalueNeuralNet & evaluer, std::pair<double, double> muLambda,
                    Matcher::result_t & res, std::string & backtrace,
@@ -101,7 +102,8 @@ int alignStructure(StructureSmithWaterman & structureSmithWaterman,
     if (structureSmithWaterman.isProfileSearch() == false) {
         StructureSmithWaterman::s_align alignTmp = structureSmithWaterman.alignStartPosBacktraceBlock(
             tSeqAA.numSequence, tSeq3Di.numSequence, targetSeqLen, par.gapOpen.values.aminoacid(),
-            par.gapExtend.values.aminoacid(), backtrace, align
+            par.gapExtend.values.aminoacid(), backtrace, align,
+            (tSeq12St != NULL) ? tSeq12St->numSequence : NULL
         );
 
         if (align.score1 == UINT32_MAX) {
@@ -139,6 +141,7 @@ int alignStructure(StructureSmithWaterman & structureSmithWaterman,
 int computeAlternativeAlignment(StructureSmithWaterman & structureSmithWaterman,
                                 StructureSmithWaterman & reverseStructureSmithWaterman,
                                 Sequence & tSeqAA, Sequence & tSeq3Di,
+                                Sequence * tSeq12St,
                                 unsigned int querySeqLen, unsigned int targetSeqLen,
                                 EvalueNeuralNet & evaluer, std::pair<double, double> muLambda,
                                 Matcher::result_t & result, Matcher::result_t & altRes,
@@ -150,7 +153,7 @@ int computeAlternativeAlignment(StructureSmithWaterman & structureSmithWaterman,
         tSeq3Di.numSequence[pos] = x3DiIndex;
     }
     if (alignStructure(structureSmithWaterman, reverseStructureSmithWaterman,
-                       tSeqAA, tSeq3Di, querySeqLen, targetSeqLen,
+                       tSeqAA, tSeq3Di, tSeq12St, querySeqLen, targetSeqLen,
                        evaluer, muLambda, altRes, backtrace, par) == -1) {
         return -1;
     }
@@ -308,9 +311,9 @@ int structurealign(int argc, const char **argv, const Command& command) {
     }
     float aaFactor = (par.alignmentType == LocalParameters::ALIGNMENT_TYPE_3DI_AA) ? 1.4 : 0.0;
     SubstitutionMatrix subMatAA(blosum.c_str(), aaFactor, par.scoreBias);
-    std::unique_ptr<SubstitutionMatrix> subMat12St;
+    SubstitutionMatrix *subMat12St = NULL;
     if (query3Di12St || target3Di12St) {
-        subMat12St.reset(new SubstitutionMatrix(mat12st.c_str(), par.submat12stScale, par.scoreBias));
+        subMat12St = new SubstitutionMatrix(mat12st.c_str(), par.submat12stScale, par.scoreBias);
     }
     //temporary output file
     Debug::Progress progress(resultReader.getSize());
@@ -330,7 +333,7 @@ int structurealign(int argc, const char **argv, const Command& command) {
         }
     }
     int8_t * tinySubMat12St = NULL;
-    if (query3Di12St || target3Di12St) {
+    if (subMat12St) {
         tinySubMat12St = (int8_t*) mem_align(ALIGN_INT, subMat12St->alphabetSize * 32);
         for (int i = 0; i < subMat12St->alphabetSize; i++) {
             for (int j = 0; j < subMat12St->alphabetSize; j++) {
@@ -403,7 +406,7 @@ int structurealign(int argc, const char **argv, const Command& command) {
                 char *querySeq3Di = q3DiDbr->sequenceReader->getData(queryId, thread_idx);
                 unsigned int querySeqLen = q3DiDbr->sequenceReader->getSeqLen(queryId);
                 const char *querySeq3Di21 = querySeq3Di;
-                if (query3Di12St) {
+                    if (query3Di12St) {
                     split3Di12St(querySeq3Di, querySeqLen, qSeq3Di21Buf, qSeq12StBuf, subMat3Di, *subMat12St);
                     querySeq3Di21 = qSeq3Di21Buf.data();
                     qSeq12St->mapSequence(id, queryKey, qSeq12StBuf.data(), querySeqLen);
@@ -460,7 +463,8 @@ int structurealign(int argc, const char **argv, const Command& command) {
                     }
                     Matcher::result_t res;
                     if(alignStructure(structureSmithWaterman, reverseStructureSmithWaterman,
-                                      tSeqAA, tSeq3Di, querySeqLen, targetSeqLen,
+                                      tSeqAA, tSeq3Di, (tSeq12St) ? tSeq12St.get() : NULL,
+                                      querySeqLen, targetSeqLen,
                                       evaluer, muLambda, res, backtrace, par) == -1){
                         rejected++;
                         continue;
@@ -510,7 +514,8 @@ int structurealign(int argc, const char **argv, const Command& command) {
                         while(altAli && moreAltAli){
                             Matcher::result_t altRes;
                             if(computeAlternativeAlignment(structureSmithWaterman, reverseStructureSmithWaterman,
-                                                           tSeqAA, tSeq3Di, querySeqLen, targetSeqLen,
+                                                           tSeqAA, tSeq3Di, (tSeq12St) ? tSeq12St.get() : NULL,
+                                                           querySeqLen, targetSeqLen,
                                                            evaluer, muLambda, res, altRes,
                                                            backtrace, par) == -1) {
                                 moreAltAli = false;
@@ -554,6 +559,10 @@ int structurealign(int argc, const char **argv, const Command& command) {
 
     free(tinySubMatAA);
     free(tinySubMat3Di);
+    if (tinySubMat12St) {
+        free(tinySubMat12St);
+    }
+    delete subMat12St;
     free(tinySubMat12St);
 
     dbw.close();
