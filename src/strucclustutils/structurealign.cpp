@@ -19,29 +19,7 @@
 #endif
 #include <memory>
 
-namespace {
-inline void split3Di12St(const char *src, size_t len,
-                         std::vector<char> &seq3di,
-                         std::vector<char> &seq12st,
-                         const BaseMatrix &subMat3Di,
-                         const BaseMatrix &subMat12St) {
-    if (seq3di.size() < len) {
-        seq3di.resize(len);
-    }
-    if (seq12st.size() < len) {
-        seq12st.resize(len);
-    }
-    for (size_t i = 0; i < len; ++i) {
-        unsigned char val = static_cast<unsigned char>(src[i]);
-        unsigned char state3di = static_cast<unsigned char>(val / Alphabet12St::STATE_CNT);
-        unsigned char state12st = static_cast<unsigned char>(val % Alphabet12St::STATE_CNT);
-        seq3di[i] = subMat3Di.num2aa[state3di];
-        seq12st[i] = subMat12St.num2aa[state12st];
-    }
-}
-} // namespace
-
-// need for sorting the results
+// need for sorting the     results
 static bool compareHitsByStructureBits(const Matcher::result_t &first, const Matcher::result_t &second) {
     if (first.score != second.score) {
         return first.score > second.score;
@@ -373,12 +351,12 @@ int structurealign(int argc, const char **argv, const Command& command) {
         std::vector<char> tSeq12StBuf;
         if (query3Di12St || target3Di12St) {
             if (query3Di12St) {
-                qSeq12St.reset(new Sequence(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, subMat12St.get(), 0, false, par.compBiasCorrection));
+                qSeq12St.reset(new Sequence(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) subMat12St, 0, false, par.compBiasCorrection));
                 qSeq3Di21Buf.reserve(par.maxSeqLen);
                 qSeq12StBuf.reserve(par.maxSeqLen);
             }
             if (target3Di12St) {
-                tSeq12St.reset(new Sequence(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, subMat12St.get(), 0, false, par.compBiasCorrection));
+                tSeq12St.reset(new Sequence(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) subMat12St, 0, false, par.compBiasCorrection));
                 tSeq3Di21Buf.reserve(par.maxSeqLen);
                 tSeq12StBuf.reserve(par.maxSeqLen);
             }
@@ -407,7 +385,7 @@ int structurealign(int argc, const char **argv, const Command& command) {
                 unsigned int querySeqLen = q3DiDbr->sequenceReader->getSeqLen(queryId);
                 const char *querySeq3Di21 = querySeq3Di;
                     if (query3Di12St) {
-                    split3Di12St(querySeq3Di, querySeqLen, qSeq3Di21Buf, qSeq12StBuf, subMat3Di, *subMat12St);
+                    StructureUtil::split3Di12St(querySeq3Di, querySeqLen, qSeq3Di21Buf, qSeq12StBuf, subMat3Di, *subMat12St);
                     querySeq3Di21 = qSeq3Di21Buf.data();
                     qSeq12St->mapSequence(id, queryKey, qSeq12StBuf.data(), querySeqLen);
                 }
@@ -451,7 +429,7 @@ int structurealign(int argc, const char **argv, const Command& command) {
 
                     const char *targetSeq3Di21 = targetSeq3Di;
                     if (target3Di12St) {
-                        split3Di12St(targetSeq3Di, targetSeqLen, tSeq3Di21Buf, tSeq12StBuf, subMat3Di, *subMat12St);
+                        StructureUtil::split3Di12St(targetSeq3Di, targetSeqLen, tSeq3Di21Buf, tSeq12StBuf, subMat3Di, *subMat12St);
                         targetSeq3Di21 = tSeq3Di21Buf.data();
                         tSeq12St->mapSequence(targetId, dbKey, tSeq12StBuf.data(), targetSeqLen);
                     }

@@ -45,7 +45,8 @@ LocalParameters::LocalParameters() :
         PARAM_INTERFACE_LDDT_THRESHOLD(PARAM_INTERFACE_LDDT_THRESHOLD_ID,"--interface-lddt-threshold", "Interface LDDT threshold", "accept alignments with a lddt > thr [0.0,1.0]",typeid(float), (void *) &filtInterfaceLddtThr, "^0(\\.[0-9]+)?|1(\\.0+)?$"),
         PARAM_MIN_ALIGNED_CHAINS(PARAM_MIN_ALIGNED_CHAINS_ID, "--min-aligned-chains", "Minimum threshold of aligned chains","save alignments with at least n chain aligned between query and target" ,typeid(int), (void *) &minAlignedChains, "^[0-9]{1}[0-9]*$"),
         PARAM_MULTIDOMAIN(PARAM_MULTIDOMAIN_ID, "--lolalign-multidomain", "MultiDomain Mode", "MultiDomain Mode LoLalign", typeid(int), (void *) &multiDomain, "^[0-1]{1}$"),
-        PARAM_SUBMAT_12ST_SCALE(PARAM_SUBMAT_12ST_SCALE_ID, "--submat-12st-scale", "12st substitution matrix scale", "Scaling factor for 12st substitution matrix", typeid(float), (void *) &submat12stScale, "^[0-9]*(\\.[0-9]+)?$")
+        PARAM_SUBMAT_12ST_SCALE(PARAM_SUBMAT_12ST_SCALE_ID, "--submat-12st-scale", "12st substitution matrix scale", "Scaling factor for 12st substitution matrix", typeid(float), (void *) &submat12stScale, "^[0-9]*(\\.[0-9]+)?$"),
+        PARAM_SS_12ST(PARAM_SS_12ST_ID, "--ss-12st", "Include 12-state alphabet", "Include 12-state structural alphabet in _ss database:\n0: disable\n1: enable", typeid(int), (void *) &ss12st, "^[0-1]{1}$")
         {
     PARAM_ALIGNMENT_MODE.description = "How to compute the alignment:\n0: automatic\n1: only score and end_pos\n2: also start_pos and cov\n3: also seq.id";
     PARAM_ALIGNMENT_MODE.regex = "^[0-3]{1}$";
@@ -104,6 +105,7 @@ LocalParameters::LocalParameters() :
     structurecreatedb.push_back(&PARAM_COORD_STORE_MODE);
     structurecreatedb.push_back(&PARAM_WRITE_LOOKUP);
     structurecreatedb.push_back(&PARAM_INPUT_FORMAT);
+    structurecreatedb.push_back(&PARAM_SS_12ST);
     // protein chain only
     structurecreatedb.push_back(&PARAM_FILE_INCLUDE);
     structurecreatedb.push_back(&PARAM_FILE_EXCLUDE);
@@ -368,6 +370,9 @@ LocalParameters::LocalParameters() :
 
     // 12st substitution matrix scale
     submat12stScale = 2.1;
+
+    // include 12-state alphabet in _ss database (default: enabled)
+    ss12st = 1;
 
     citations.emplace(CITATION_FOLDSEEK, "van Kempen, M., Kim, S.S., Tumescheit, C., Mirdita, M., Lee, J., Gilchrist, C.L.M., Söding, J., and Steinegger, M. Fast and accurate protein structure search with Foldseek. Nature Biotechnology, doi:10.1038/s41587-023-01773-0 (2023)");
     citations.emplace(CITATION_FOLDSEEK_MULTIMER, "Kim, W., Mirdita, M., Levy Karin, E., Gilchrist, C.L.M., Schweke, H., Söding, J., Levy, E., and Steinegger, M. Rapid and sensitive protein complex alignment with Foldseek-Multimer. Nature Methods, doi:10.1038/s41592-025-02593-7 (2025)");
