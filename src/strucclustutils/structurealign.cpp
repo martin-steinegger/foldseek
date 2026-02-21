@@ -47,9 +47,10 @@ int alignStructure(StructureSmithWaterman & structureSmithWaterman,
 
     float seqId = 0.0;
     backtrace.clear();
+    const unsigned char *db12StSeq = (tSeq12St != NULL) ? tSeq12St->numSequence : NULL;
     // align only score and end pos
     StructureSmithWaterman::s_align align = structureSmithWaterman.alignScoreEndPos<StructureSmithWaterman::PROFILE>(tSeqAA.numSequence, tSeq3Di.numSequence, targetSeqLen, par.gapOpen.values.aminoacid(),
-                                                                                    par.gapExtend.values.aminoacid(), querySeqLen / 2);
+                                                                                    par.gapExtend.values.aminoacid(), querySeqLen / 2, db12StSeq);
     bool hasLowerCoverage = !(Util::hasCoverage(par.covThr, par.covMode, align.qCov, align.tCov));
     if(hasLowerCoverage){
         return -1;
@@ -67,7 +68,7 @@ int alignStructure(StructureSmithWaterman & structureSmithWaterman,
     //} else {
     revAlign = reverseStructureSmithWaterman.alignScoreEndPos<StructureSmithWaterman::PROFILE>(tSeqAA.numSequence, tSeq3Di.numSequence,
                                                                   targetSeqLen, par.gapOpen.values.aminoacid(),
-                                                                  par.gapExtend.values.aminoacid(), querySeqLen / 2);
+                                                                  par.gapExtend.values.aminoacid(), querySeqLen / 2, db12StSeq);
     //}
     int32_t score = static_cast<int32_t>(align.score1) - static_cast<int32_t>(revAlign.score1);
     align.evalue = evaluer.computeEvalueCorr(score, muLambda.first, muLambda.second);
@@ -84,7 +85,7 @@ int alignStructure(StructureSmithWaterman & structureSmithWaterman,
             (tSeq12St != NULL) ? tSeq12St->numSequence : NULL
         );
 
-        if (align.score1 == UINT32_MAX) {
+        if (alignTmp.score1 == UINT32_MAX) {
             Debug(Debug::WARNING) << "block-align failed, falling back to normal alignment\n";
             blockAlignFailed = true;
         } else {
@@ -101,7 +102,8 @@ int alignStructure(StructureSmithWaterman & structureSmithWaterman,
                                                                                                par.alignmentMode,
                                                                                                backtrace, align,
                                                                                                par.covMode, par.covThr,
-                                                                                               querySeqLen / 2);
+                                                                                               querySeqLen / 2,
+                                                                                               db12StSeq);
     }
 
     unsigned int alnLength = Matcher::computeAlnLength(align.qStartPos1, align.qEndPos1, align.dbStartPos1, align.dbEndPos1);
@@ -129,6 +131,9 @@ int computeAlternativeAlignment(StructureSmithWaterman & structureSmithWaterman,
     for (int pos = result.dbStartPos; pos < result.dbEndPos; ++pos) {
         tSeqAA.numSequence[pos] = xAAIndex;
         tSeq3Di.numSequence[pos] = x3DiIndex;
+        if (tSeq12St != NULL) {
+            tSeq12St->numSequence[pos] = tSeq12St->subMat->aa2num[static_cast<int>('X')];
+        }
     }
     if (alignStructure(structureSmithWaterman, reverseStructureSmithWaterman,
                        tSeqAA, tSeq3Di, tSeq12St, querySeqLen, targetSeqLen,
@@ -181,7 +186,6 @@ int structurealign(int argc, const char **argv, const Command& command) {
 
     bool target3Di12St = StructureUtil::is3Di12StDb(t3DiDbr.sequenceReader->getDbtype());
     bool query3Di12St  = StructureUtil::is3Di12StDb(q3DiDbr->sequenceReader->getDbtype());
-
     bool db1CaExist = FileUtil::fileExists((par.db1 + "_ca.dbtype").c_str());
     bool db2CaExist = FileUtil::fileExists((par.db2 + "_ca.dbtype").c_str());
     if(Parameters::isEqualDbtype(tAADbr.getDbtype(), Parameters::DBTYPE_INDEX_DB)){
@@ -312,10 +316,13 @@ int structurealign(int argc, const char **argv, const Command& command) {
     }
     int8_t * tinySubMat12St = NULL;
     if (subMat12St) {
-        tinySubMat12St = (int8_t*) mem_align(ALIGN_INT, subMat12St->alphabetSize * 32);
+        // SSW uses subMatAA.alphabetSize as stride for all matrices including 12st
+        int stride = subMat3Di.alphabetSize;
+        tinySubMat12St = (int8_t*) mem_align(ALIGN_INT, stride * stride * sizeof(int8_t));
+        memset(tinySubMat12St, 0, stride * stride * sizeof(int8_t));
         for (int i = 0; i < subMat12St->alphabetSize; i++) {
             for (int j = 0; j < subMat12St->alphabetSize; j++) {
-                tinySubMat12St[i * subMat12St->alphabetSize + j] = subMat12St->subMatrix[i][j];
+                tinySubMat12St[i * stride + j] = subMat12St->subMatrix[i][j];
             }
         }
     }
@@ -340,7 +347,7 @@ int structurealign(int argc, const char **argv, const Command& command) {
             lddtcalculator = new LDDTCalculator(q3DiDbr->sequenceReader->getMaxSeqLen() + 1,  t3DiDbr.sequenceReader->getMaxSeqLen() + 1);
         }
         Sequence qSeqAA(par.maxSeqLen, qAADbr->getDbtype(), (const BaseMatrix *) &subMatAA, 0, false, par.compBiasCorrection);
-        Sequence qSeq3Di(par.maxSeqLen, q3DiDbr->getDbtype(), (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
+        Sequence qSeq3Di(par.maxSeqLen, query3Di12St ? Parameters::DBTYPE_AMINO_ACIDS : q3DiDbr->getDbtype(), (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
         Sequence tSeqAA(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) &subMatAA, 0, false, par.compBiasCorrection);
         Sequence tSeq3Di(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
         std::unique_ptr<Sequence> qSeq12St;
@@ -537,11 +544,8 @@ int structurealign(int argc, const char **argv, const Command& command) {
 
     free(tinySubMatAA);
     free(tinySubMat3Di);
-    if (tinySubMat12St) {
-        free(tinySubMat12St);
-    }
-    delete subMat12St;
     free(tinySubMat12St);
+    delete subMat12St;
 
     dbw.close();
     resultReader.close();

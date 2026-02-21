@@ -271,10 +271,13 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
     }
     int8_t * tinySubMat12St = NULL;
     if (query3Di12St || target3Di12St) {
-        tinySubMat12St = (int8_t*) mem_align(ALIGN_INT, subMat12St->alphabetSize * 32);
+        // SSW uses subMat3Di.alphabetSize as stride for all matrices including 12st
+        int stride = subMat3Di.alphabetSize;
+        tinySubMat12St = (int8_t*) mem_align(ALIGN_INT, stride * stride * sizeof(int8_t));
+        memset(tinySubMat12St, 0, stride * stride * sizeof(int8_t));
         for (int i = 0; i < subMat12St->alphabetSize; i++) {
             for (int j = 0; j < subMat12St->alphabetSize; j++) {
-                tinySubMat12St[i * subMat12St->alphabetSize + j] = subMat12St->subMatrix[i][j];
+                tinySubMat12St[i * stride + j] = subMat12St->subMatrix[i][j];
             }
         }
     }
@@ -291,9 +294,9 @@ int structureungappedalign(int argc, const char **argv, const Command& command) 
         StructureSmithWaterman reverseStructureSmithWaterman(par.maxSeqLen, subMat3Di.alphabetSize, par.compBiasCorrection, par.compBiasCorrectionScale, NULL, NULL);
 
         Sequence qSeqAA(par.maxSeqLen, qdbrAA.getDbtype(), (const BaseMatrix *) &subMatAA, 0, false, par.compBiasCorrection);
-        Sequence qSeq3Di(par.maxSeqLen, qdbr3Di.getDbtype(), (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
+        Sequence qSeq3Di(par.maxSeqLen, query3Di12St ? Parameters::DBTYPE_AMINO_ACIDS : qdbr3Di.getDbtype(), (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
         Sequence qRevSeqAA(par.maxSeqLen, qdbrAA.getDbtype(), (const BaseMatrix *) &subMatAA, 0, false, par.compBiasCorrection);
-        Sequence qRevSeq3Di(par.maxSeqLen, qdbr3Di.getDbtype(), (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
+        Sequence qRevSeq3Di(par.maxSeqLen, query3Di12St ? Parameters::DBTYPE_AMINO_ACIDS : qdbr3Di.getDbtype(), (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
         Sequence tSeqAA(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) &subMatAA, 0, false, par.compBiasCorrection);
         Sequence tSeq3Di(par.maxSeqLen, Parameters::DBTYPE_AMINO_ACIDS, (const BaseMatrix *) &subMat3Di, 0, false, par.compBiasCorrection);
         std::unique_ptr<Sequence> qSeq12St;

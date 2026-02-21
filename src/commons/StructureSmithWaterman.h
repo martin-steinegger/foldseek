@@ -116,7 +116,8 @@ public:
             int32_t db_length,
             const uint8_t gap_open,
             const uint8_t gap_extend,
-            const int32_t maskLen);
+            const int32_t maskLen,
+            const unsigned char *db_12st_sequence = NULL);
 
     template <unsigned int profile_type>
     s_align alignStartPosBacktrace (
@@ -129,7 +130,8 @@ public:
             std::string & backtrace,
             StructureSmithWaterman::s_align r,
             const int covMode, const float covThr,
-            const int32_t maskLen);
+            const int32_t maskLen,
+            const unsigned char *db_12st_sequence = NULL);
 
     s_align alignStartPosBacktraceBlock (
             const unsigned char *db_aa_sequence,
@@ -299,7 +301,7 @@ private:
      wight_match > 0, all other weights < 0.
      The returned positions are 0-based.
      */
-    template <const unsigned int type>
+    template <const unsigned int type, bool HAS_12ST = false>
     std::pair<alignment_end, alignment_end> sw_sse2_byte (const unsigned char*db_aa_sequence,
                                                           const unsigned char*db_3di_sequence,
                                                           int8_t ref_dir,	// 0: forward ref; 1: reverse ref
@@ -319,8 +321,10 @@ private:
                                                      alignment beginning point. If this score
                                                      is set to 0, it will not be used */
                                                           uint8_t bias,  /* Shift 0 point to a positive value. */
-                                                          int32_t maskLen);
-    template <const unsigned int type>
+                                                          int32_t maskLen,
+                                                          const unsigned char *db_12st_sequence = NULL,
+                                                          const simd_int *query_12st_profile_byte = NULL);
+    template <const unsigned int type, bool HAS_12ST = false>
     std::pair<alignment_end, alignment_end> sw_sse2_word (const unsigned char* db_aa_sequence,
                                                           const unsigned char* db_3di_sequence,
                                                           int8_t ref_dir,	// 0: forward ref; 1: reverse ref
@@ -336,9 +340,11 @@ private:
                                                           const simd_int*query_aa_profile_byte,
                                                           const simd_int*query_3di_profile_byte,
                                                           uint16_t terminate,
-                                                          int32_t maskLen);
+                                                          int32_t maskLen,
+                                                          const unsigned char *db_12st_sequence = NULL,
+                                                          const simd_int *query_12st_profile_word = NULL);
 
-    template <const unsigned int type>
+    template <const unsigned int type, bool HAS_12ST = false>
     std::pair<alignment_end, alignment_end> sw_sse2_int(
         const unsigned char* db_aa_sequence,
         const unsigned char* db_3di_sequence,
@@ -355,7 +361,9 @@ private:
         const simd_int*query_aa_profile_byte,
         const simd_int*query_3di_profile_byte,
         uint32_t terminate,
-        int32_t maskLen
+        int32_t maskLen,
+        const unsigned char *db_12st_sequence = NULL,
+        const simd_int *query_12st_profile_int = NULL
     );
 
     template <const unsigned int type>

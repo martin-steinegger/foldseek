@@ -302,7 +302,8 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos (
         int32_t db_length,
         const uint8_t gap_open,
         const uint8_t gap_extend,
-        const int32_t maskLen) {
+        const int32_t maskLen,
+        const unsigned char *db_12st_sequence) {
     int32_t query_length = profile->query_length;
     s_align r;
     r.word = 1;
@@ -335,6 +336,15 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos (
                                               profile->profile_aa_word,
                                               profile->profile_3di_word, USHRT_MAX, maskLen);
 
+        } else if (profile->has12St) {
+            bests = sw_sse2_word<SUBSTITUTIONMATRIX, true>(db_aa_sequence, db_3di_sequence, 0, db_length, query_length,
+                                                     gap_open, gap_extend,
+#ifdef GAP_POS_SCORING
+                                                     NULL, NULL, NULL,
+#endif
+                                                     profile->profile_aa_word,
+                                                     profile->profile_3di_word, USHRT_MAX, maskLen,
+                                                     db_12st_sequence, profile->profile_12st_word);
         } else {
             bests = sw_sse2_word<SUBSTITUTIONMATRIX>(db_aa_sequence, db_3di_sequence, 0, db_length, query_length,
                                                      gap_open, gap_extend,
@@ -356,6 +366,17 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos (
 #endif
                     profile->profile_aa_int,
                     profile->profile_3di_int, UINT32_MAX, maskLen
+                );
+            } else if (profile->has12St) {
+                bests = sw_sse2_int<SUBSTITUTIONMATRIX, true>(
+                    db_aa_sequence, db_3di_sequence, 0, db_length, query_length,
+                    gap_open, gap_extend,
+#ifdef GAP_POS_SCORING
+                    NULL, NULL, NULL,
+#endif
+                    profile->profile_aa_int,
+                    profile->profile_3di_int, UINT32_MAX, maskLen,
+                    db_12st_sequence, profile->profile_12st_int
                 );
             } else {
                 bests = sw_sse2_int<SUBSTITUTIONMATRIX>(
@@ -397,9 +418,9 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos (
 }
 
 template
-StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos<StructureSmithWaterman::PROFILE>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const int32_t);
+StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos<StructureSmithWaterman::PROFILE>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const int32_t, const unsigned char*);
 template
-StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos<StructureSmithWaterman::PROFILE_HMM>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const int32_t);
+StructureSmithWaterman::s_align StructureSmithWaterman::alignScoreEndPos<StructureSmithWaterman::PROFILE_HMM>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const int32_t, const unsigned char*);
 
 StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktraceBlock(
         const unsigned char *db_aa_sequence,
@@ -621,7 +642,8 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
         std::string & backtrace,
         StructureSmithWaterman::s_align r,
         const int covMode, const float covThr,
-        const int32_t maskLen) {
+        const int32_t maskLen,
+        const unsigned char *db_12st_sequence) {
     int32_t query_length = profile->query_length;
     int32_t queryOffset = query_length - r.qEndPos1 - 1;
     std::pair<alignment_end, alignment_end> bests_reverse;
@@ -653,13 +675,24 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
                 createQueryProfile<int8_t, VECSIZE_INT * 4, SUBSTITUTIONMATRIX>(profile->profile_12st_rev_byte, profile->query_12st_rev_sequence, profile->composition_bias_12st_rev, profile->mat_12st,
                                                                                 r.qEndPos1 + 1, profile->alphabetSize, profile->bias, queryOffset, 0);
             }
-            bests_reverse = sw_sse2_byte<SUBSTITUTIONMATRIX>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
-                                                             gap_open, gap_extend,
+            if (profile->has12St) {
+                bests_reverse = sw_sse2_byte<SUBSTITUTIONMATRIX, true>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
+                                                                 gap_open, gap_extend,
 #ifdef GAP_POS_SCORING
-                                                             NULL, NULL, NULL,
+                                                                 NULL, NULL, NULL,
 #endif
-                                                             profile->profile_aa_rev_byte,profile->profile_3di_rev_byte,
-                                                             r.score1, profile->bias, maskLen);
+                                                                 profile->profile_aa_rev_byte,profile->profile_3di_rev_byte,
+                                                                 r.score1, profile->bias, maskLen,
+                                                                 db_12st_sequence, profile->profile_12st_rev_byte);
+            } else {
+                bests_reverse = sw_sse2_byte<SUBSTITUTIONMATRIX>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
+                                                                 gap_open, gap_extend,
+#ifdef GAP_POS_SCORING
+                                                                 NULL, NULL, NULL,
+#endif
+                                                                 profile->profile_aa_rev_byte,profile->profile_3di_rev_byte,
+                                                                 r.score1, profile->bias, maskLen);
+            }
         }
     } else if (r.word == 1) {
         if (profile->isProfile) {
@@ -690,13 +723,24 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
                 createQueryProfile<int16_t, VECSIZE_INT * 2, SUBSTITUTIONMATRIX>(profile->profile_12st_rev_word, profile->query_12st_rev_sequence, profile->composition_bias_12st_rev, profile->mat_12st,
                                                                                  r.qEndPos1 + 1, profile->alphabetSize, 0, queryOffset, 0);
             }
-            bests_reverse = sw_sse2_word<SUBSTITUTIONMATRIX>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
-                                                             gap_open, gap_extend,
+            if (profile->has12St) {
+                bests_reverse = sw_sse2_word<SUBSTITUTIONMATRIX, true>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
+                                                                 gap_open, gap_extend,
 #ifdef GAP_POS_SCORING
-                                                             NULL, NULL, NULL,
+                                                                 NULL, NULL, NULL,
 #endif
-                                                             profile->profile_aa_rev_word, profile->profile_3di_rev_word,
-                                                             r.score1, maskLen);
+                                                                 profile->profile_aa_rev_word, profile->profile_3di_rev_word,
+                                                                 r.score1, maskLen,
+                                                                 db_12st_sequence, profile->profile_12st_rev_word);
+            } else {
+                bests_reverse = sw_sse2_word<SUBSTITUTIONMATRIX>(db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
+                                                                 gap_open, gap_extend,
+#ifdef GAP_POS_SCORING
+                                                                 NULL, NULL, NULL,
+#endif
+                                                                 profile->profile_aa_rev_word, profile->profile_3di_rev_word,
+                                                                 r.score1, maskLen);
+            }
         }
     } else {
         if (profile->isProfile) {
@@ -741,15 +785,28 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
                     r.qEndPos1 + 1, profile->alphabetSize, 0, queryOffset, 0
                 );
             }
-            bests_reverse = sw_sse2_int<SUBSTITUTIONMATRIX>(
-                db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
-                gap_open, gap_extend,
+            if (profile->has12St) {
+                bests_reverse = sw_sse2_int<SUBSTITUTIONMATRIX, true>(
+                    db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
+                    gap_open, gap_extend,
 #ifdef GAP_POS_SCORING
-                NULL, NULL, NULL,
+                    NULL, NULL, NULL,
 #endif
-                profile->profile_aa_rev_int, profile->profile_3di_rev_int,
-                r.score1, maskLen
-            );
+                    profile->profile_aa_rev_int, profile->profile_3di_rev_int,
+                    r.score1, maskLen,
+                    db_12st_sequence, profile->profile_12st_rev_int
+                );
+            } else {
+                bests_reverse = sw_sse2_int<SUBSTITUTIONMATRIX>(
+                    db_aa_sequence, db_3di_sequence, 1, r.dbEndPos1 + 1, r.qEndPos1 + 1,
+                    gap_open, gap_extend,
+#ifdef GAP_POS_SCORING
+                    NULL, NULL, NULL,
+#endif
+                    profile->profile_aa_rev_int, profile->profile_3di_rev_int,
+                    r.score1, maskLen
+                );
+            }
         }
     }
 
@@ -826,9 +883,9 @@ StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace (
 }
 
 template
-StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace<StructureSmithWaterman::PROFILE>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string& , StructureSmithWaterman::s_align, const int, const float, const int32_t);
+StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace<StructureSmithWaterman::PROFILE>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string& , StructureSmithWaterman::s_align, const int, const float, const int32_t, const unsigned char*);
 template
-StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace<StructureSmithWaterman::PROFILE_HMM>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string& , StructureSmithWaterman::s_align, const int, const float, const int32_t);
+StructureSmithWaterman::s_align StructureSmithWaterman::alignStartPosBacktrace<StructureSmithWaterman::PROFILE_HMM>(const unsigned char*, const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string& , StructureSmithWaterman::s_align, const int, const float, const int32_t, const unsigned char*);
 
 void StructureSmithWaterman::computerBacktrace(s_profile * query, const unsigned char * db_aa_sequence,
                                                s_align & alignment, std::string & backtrace,
@@ -888,7 +945,7 @@ uint32_t StructureSmithWaterman::cigar_int_to_len (uint32_t cigar_int)
     return res;
 }
 
-template <const unsigned int type>
+template <const unsigned int type, bool HAS_12ST>
 std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignment_end> StructureSmithWaterman::sw_sse2_byte (const unsigned char* db_aa_sequence,
                                                                                                                               const unsigned char* db_3di_sequence,
                                                                                                                               int8_t ref_dir,	// 0: forward ref; 1: reverse ref
@@ -908,7 +965,9 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
                                                                                                                                                      alignment beginning point. If this score
                                                                                                                                                      is set to 0, it will not be used */
                                                                                                                               uint8_t bias,  /* Shift 0 point to a positive value. */
-                                                                                                                              int32_t maskLen) {
+                                                                                                                              int32_t maskLen,
+                                                                                                                              const unsigned char *db_12st_sequence,
+                                                                                                                              const simd_int *query_12st_profile_byte) {
 #define max16(m, vm) ((m) = simdi8_hmax((vm)));
 
     uint8_t max = 0;		                     /* the max alignment score */
@@ -946,7 +1005,7 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
     simd_int vGapE = simdi8_set(gap_extend);
 
     /* 16 byte bias vector */
-    simd_int vBias = simdi8_set(2*bias);
+    simd_int vBias = simdi8_set(HAS_12ST ? 3*bias : 2*bias);
 
     simd_int vMaxScore = vZero; /* Trace the highest score of the whole SW matrix. */
     simd_int vMaxMark = vZero; /* Trace the highest score till the previous column. */
@@ -973,6 +1032,7 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
         vH = simdi8_shiftl (vH, 1); /* Shift the 128-bit value in vH left by 1 byte. */
         const simd_int* vPAA = query_aa_profile_byte + db_aa_sequence[i] * segLen; /* Right part of the query_profile_byte */
         const simd_int* vP3Di = query_3di_profile_byte + db_3di_sequence[i] * segLen; /* Right part of the query_profile_byte */
+        const simd_int* vP12St = HAS_12ST ? query_12st_profile_byte + db_12st_sequence[i] * segLen : NULL;
         //	int8_t* t;
         //	int32_t ti;
         //        fprintf(stderr, "i: %d of %d:\t ", i,segLen);
@@ -987,6 +1047,9 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
         /* inner loop to process the query sequence */
         for (j = 0; LIKELY(j < segLen); ++j) {
             simd_int score = simdui8_adds(simdi_load(vPAA + j), simdi_load(vP3Di + j));
+            if (HAS_12ST) {
+                score = simdui8_adds(score, simdi_load(vP12St + j));
+            }
 //            int8_t* t;
 //            int32_t ti;
 //            fprintf(stderr, "score: ");
@@ -1177,7 +1240,7 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
 #undef max16
 }
 
-template <const unsigned int type>
+template <const unsigned int type, bool HAS_12ST>
 std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignment_end> StructureSmithWaterman::sw_sse2_word (const unsigned char* db_aa_sequence,
                                                                                                                               const unsigned char* db_3di_sequence,
                                                                                                                               int8_t ref_dir,	// 0: forward ref; 1: reverse ref
@@ -1193,7 +1256,9 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
                                                                                                                               const simd_int*query_aa_profile_word,
                                                                                                                               const simd_int*query_3di_profile_word,
                                                                                                                               uint16_t terminate,
-                                                                                                                              int32_t maskLen) {
+                                                                                                                              int32_t maskLen,
+                                                                                                                              const unsigned char *db_12st_sequence,
+                                                                                                                              const simd_int *query_12st_profile_word) {
 
 #define max8(m, vm) ((m) = simdi16_hmax((vm)));
 
@@ -1256,6 +1321,7 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
 
         const simd_int* vPAA = query_aa_profile_word + db_aa_sequence[i] * segLen; /* Right part of the query_profile_byte */
         const simd_int* vP3Di = query_3di_profile_word + db_3di_sequence[i] * segLen; /* Right part of the query_profile_byte */
+        const simd_int* vP12St = HAS_12ST ? query_12st_profile_word + db_12st_sequence[i] * segLen : NULL;
 
         pvHLoad = pvHStore;
         pvHStore = pv;
@@ -1263,6 +1329,9 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
         /* inner loop to process the query sequence */
         for (j = 0; LIKELY(j < segLen); j ++) {
             simd_int score = simdi16_adds(simdi_load(vPAA + j), simdi_load(vP3Di + j));
+            if (HAS_12ST) {
+                score = simdi16_adds(score, simdi_load(vP12St + j));
+            }
             vH = simdi16_adds(vH, score);
 
             /* Get max from vH, vE and vF. */
@@ -1409,7 +1478,7 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
 }
 
 
-template <const unsigned int type>
+template <const unsigned int type, bool HAS_12ST>
 std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignment_end> StructureSmithWaterman::sw_sse2_int(
     const unsigned char* db_aa_sequence,
     const unsigned char* db_3di_sequence,
@@ -1426,7 +1495,9 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
     const simd_int* query_aa_profile_int,
     const simd_int* query_3di_profile_int,
     uint32_t terminate,
-    int32_t maskLen) {
+    int32_t maskLen,
+    const unsigned char *db_12st_sequence,
+    const simd_int *query_12st_profile_int) {
 #define max4(m, vm) ((m) = simdi32_hmax((vm)));
 
     uint32_t max = 0; /* the max alignment score */
@@ -1488,6 +1559,7 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
 
         const simd_int* vPAA = query_aa_profile_int + db_aa_sequence[i] * segLen; /* Right part of the query_profile_byte */
         const simd_int* vP3Di = query_3di_profile_int + db_3di_sequence[i] * segLen; /* Right part of the query_profile_byte */
+        const simd_int* vP12St = HAS_12ST ? query_12st_profile_int + db_12st_sequence[i] * segLen : NULL;
 
         pvHLoad = pvHStore;
         pvHStore = pv;
@@ -1495,6 +1567,9 @@ std::pair<StructureSmithWaterman::alignment_end, StructureSmithWaterman::alignme
         /* inner loop to process the query sequence */
         for (j = 0; LIKELY(j < segLen); j ++) {
             simd_int score = simdi32_add(simdi_load(vPAA + j), simdi_load(vP3Di + j));
+            if (HAS_12ST) {
+                score = simdi32_add(score, simdi_load(vP12St + j));
+            }
             vH = simdi32_add(vH, score);
 
             /* Get max from vH, vE and vF. */
